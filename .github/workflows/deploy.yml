@@ -10,22 +10,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ 코드 체크아웃
       - name: Checkout source
         uses: actions/checkout@v4
 
+      # 2️⃣ Node.js 세팅
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: npm
 
+      # 3️⃣ 의존성 설치
       - name: Install dependencies
         run: npm ci
 
-      - name: React build
+      # 4️⃣ React 빌드
+      - name: Build React
         run: npm run build
 
-      # 1️⃣ GitHub Actions → Bastion SSH 키 설정
+      # 5️⃣ GitHub Actions → Bastion SSH 키 설정
       - name: Setup SSH for Bastion
         run: |
           mkdir -p ~/.ssh
@@ -33,7 +37,7 @@ jobs:
           chmod 600 ~/.ssh/deploy.key
           ssh-keyscan -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts || true
 
-      # 2️⃣ dist 결과물 Bastion으로 업로드
+      # 6️⃣ Bastion 서버에 dist 업로드
       - name: Upload dist to Bastion
         run: |
           ssh -i ~/.ssh/deploy.key \
@@ -46,8 +50,8 @@ jobs:
             dist/ \
             ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}:~/dist/
 
-      # 3️⃣ Bastion → nginx2a 배포 + nginx reload
-      - name: Deploy to nginx2a via Bastion
+      # 7️⃣ Bastion → nginx 서버 배포 및 nginx reload
+      - name: Deploy to nginx via Bastion
         run: |
           ssh -i ~/.ssh/deploy.key \
             -o StrictHostKeyChecking=no \
@@ -55,19 +59,20 @@ jobs:
 
             set -e
 
-            NGINX2A_IP=10.0.32.246
+            NGINX_IP=10.0.32.246
+            NGINX_KEY=~/kakao_keypair.pem
 
-            echo "▶ Bastion → nginx2a dist rsync"
+            echo "▶ Bastion → nginx dist rsync"
             rsync -avz \
-              -e "ssh -i ~/.ssh/deploy.key -o StrictHostKeyChecking=no" \
-              ~/dist/ ubuntu@$NGINX2A_IP:/home/ubuntu/dist/
+              -e "ssh -i $NGINX_KEY -o StrictHostKeyChecking=no" \
+              ~/dist/ ubuntu@$NGINX_IP:/home/ubuntu/dist/
 
-            echo "▶ nginx2a static files deploy & nginx reload"
-            ssh -i ~/.ssh/deploy.key -o StrictHostKeyChecking=no ubuntu@$NGINX2A_IP "
+            echo "▶ nginx static files deploy & reload"
+            ssh -i $NGINX_KEY -o StrictHostKeyChecking=no ubuntu@$NGINX_IP "
               sudo rm -rf /var/www/react/* &&
               sudo cp -r /home/ubuntu/dist/* /var/www/react/ &&
               sudo systemctl reload nginx
             "
 
-            echo "✅ nginx2a 배포 완료"
+            echo "✅ nginx 배포 완료"
           EOF
