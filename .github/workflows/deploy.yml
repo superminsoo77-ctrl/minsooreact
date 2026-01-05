@@ -38,7 +38,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy.key \
             ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "
-              rsync -avz ~/dist/ nginx2a:/home/ubuntu/dist/ &&
+              rsync -avz ~/dist/ ubuntu@10.0.2.246:/home/ubuntu/dist/ &&
               ssh nginx2a '
                 sudo rm -rf /var/www/react/* &&
                 sudo cp -r /home/ubuntu/dist/* /var/www/react/ &&
