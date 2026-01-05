@@ -1,47 +1,64 @@
 name: Bastion
+
 on:
   push:
     branches:
       - main
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: npm
+
       - name: Install dependencies
         run: npm ci
+
       - name: React 파일 빌드
         run: npm run build
-      - name: ssh 키 접속
+
+      - name: SSH 키 설정
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.BASTION_SSH_KEY }}" > ~/.ssh/deploy.key
           chmod 600 ~/.ssh/deploy.key
-          ssh-keyscan -T 5 -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts || true
-          
-      - name: bastion에 파일 업로드
+          ssh-keyscan -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts || true
+
+      - name: Bastion에 파일 업로드
         run: |
           ssh -i ~/.ssh/deploy.key \
+            -o StrictHostKeyChecking=no \
             ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} \
             "mkdir -p ~/dist && rm -rf ~/dist/*"
+
           rsync -avz \
-            -e "ssh -i ~/.ssh/deploy.key" \
+            -e "ssh -i ~/.ssh/deploy.key -o StrictHostKeyChecking=no" \
             dist/ \
             ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}:~/dist/
-      - name: bastion에서 nginx로 파일 이동 후 재시작
+
+      - name: Bastion → nginx2a 배포 및 nginx reload
         run: |
           ssh -i ~/.ssh/deploy.key \
-            ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "
-              rsync -avz ~/dist/ nginx2a:/home/ubuntu/dist/ &&
-              ssh nginx2a '
-                sudo rm -rf /var/www/react/* &&
-                sudo cp -r /home/ubuntu/dist/* /var/www/react/ &&
-                sudo systemctl reload nginx
-              '
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} << 'EOF'
+            
+            NGINX2A_IP=10.0.32.246
+
+            rsync -avz \
+              -e "ssh -o StrictHostKeyChecking=no" \
+              ~/dist/ ubuntu@$NGINX2A_IP:/home/ubuntu/dist/
+
+            ssh -o StrictHostKeyChecking=no ubuntu@$NGINX2A_IP "
+              sudo rm -rf /var/www/react/* &&
+              sudo cp -r /home/ubuntu/dist/* /var/www/react/ &&
+              sudo systemctl reload nginx
             "
+          EOF
