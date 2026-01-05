@@ -1,4 +1,4 @@
-name: Bastion
+name: Bastion Deploy
 
 on:
   push:
@@ -22,17 +22,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: React 파일 빌드
+      - name: React build
         run: npm run build
 
-      - name: SSH 키 설정
+      # 1️⃣ GitHub Actions → Bastion SSH 키 설정
+      - name: Setup SSH for Bastion
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.BASTION_SSH_KEY }}" > ~/.ssh/deploy.key
           chmod 600 ~/.ssh/deploy.key
           ssh-keyscan -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts || true
 
-      - name: Bastion에 파일 업로드
+      # 2️⃣ dist 결과물 Bastion으로 업로드
+      - name: Upload dist to Bastion
         run: |
           ssh -i ~/.ssh/deploy.key \
             -o StrictHostKeyChecking=no \
@@ -44,21 +46,28 @@ jobs:
             dist/ \
             ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}:~/dist/
 
-      - name: Bastion → nginx2a 배포 및 nginx reload
+      # 3️⃣ Bastion → nginx2a 배포 + nginx reload
+      - name: Deploy to nginx2a via Bastion
         run: |
           ssh -i ~/.ssh/deploy.key \
             -o StrictHostKeyChecking=no \
             ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} << 'EOF'
-            
+
+            set -e
+
             NGINX2A_IP=10.0.32.246
 
+            echo "▶ Bastion → nginx2a dist rsync"
             rsync -avz \
-              -e "ssh -o StrictHostKeyChecking=no" \
+              -e "ssh -i ~/.ssh/kakao_keypair.pem -o StrictHostKeyChecking=no" \
               ~/dist/ ubuntu@$NGINX2A_IP:/home/ubuntu/dist/
 
-            ssh -o StrictHostKeyChecking=no ubuntu@$NGINX2A_IP "
+            echo "▶ nginx2a static files deploy & nginx reload"
+            ssh -i ~/.ssh/kakao_keypair.pem -o StrictHostKeyChecking=no ubuntu@$NGINX2A_IP "
               sudo rm -rf /var/www/react/* &&
               sudo cp -r /home/ubuntu/dist/* /var/www/react/ &&
               sudo systemctl reload nginx
             "
+
+            echo "✅ nginx2a 배포 완료"
           EOF
