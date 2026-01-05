@@ -59,11 +59,11 @@ jobs:
 
             echo "▶ Bastion → nginx2a dist rsync"
             rsync -avz \
-              -e "ssh -i ~/.ssh/kakao_keypair.pem -o StrictHostKeyChecking=no" \
+              -e "ssh -i ~/.ssh/deploy.key -o StrictHostKeyChecking=no" \
               ~/dist/ ubuntu@$NGINX2A_IP:/home/ubuntu/dist/
 
             echo "▶ nginx2a static files deploy & nginx reload"
-            ssh -i ~/.ssh/kakao_keypair.pem -o StrictHostKeyChecking=no ubuntu@$NGINX2A_IP "
+            ssh -i ~/.ssh/deploy.key -o StrictHostKeyChecking=no ubuntu@$NGINX2A_IP "
               sudo rm -rf /var/www/react/* &&
               sudo cp -r /home/ubuntu/dist/* /var/www/react/ &&
               sudo systemctl reload nginx
