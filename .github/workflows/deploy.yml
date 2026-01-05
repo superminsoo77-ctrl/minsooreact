@@ -35,10 +35,20 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.BASTION_SSH_KEY }}" > ~/.ssh/deploy.key
           chmod 600 ~/.ssh/deploy.key
-          
           ssh-keyscan -H ${{ secrets.BASTION_HOST }} >> ~/.ssh/known_hosts || true
 
-      # 6️⃣ Bastion 서버에 dist 업로드
+      # 6️⃣ Bastion 서버에 kakao_keypair.pem 생성 (Bastion → nginx 키)
+      - name: Setup SSH key for nginx on Bastion
+        run: |
+          ssh -i ~/.ssh/deploy.key \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} << 'EOF'
+            mkdir -p ~/.ssh
+            echo "${{ secrets.KAKAO_KEY }}" > ~/.ssh/kakao_keypair.pem
+            chmod 600 ~/.ssh/kakao_keypair.pem
+            EOF
+
+      # 7️⃣ Bastion 서버에 dist 업로드
       - name: Upload dist to Bastion
         run: |
           ssh -i ~/.ssh/deploy.key \
@@ -51,7 +61,7 @@ jobs:
             dist/ \
             ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }}:~/dist/
 
-      # 7️⃣ Bastion → nginx 서버 배포 및 nginx reload
+      # 8️⃣ Bastion → nginx 서버 배포 및 nginx reload
       - name: Deploy to nginx via Bastion
         run: |
           ssh -i ~/.ssh/deploy.key \
@@ -61,7 +71,7 @@ jobs:
             set -e
 
             NGINX_IP=10.0.32.246
-            NGINX_KEY=~/kakao_keypair.pem
+            NGINX_KEY=~/.ssh/kakao_keypair.pem  # Bastion 홈 기준
 
             echo "▶ Bastion → nginx dist rsync"
             rsync -avz \
